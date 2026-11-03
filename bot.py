@@ -3,7 +3,8 @@ import subprocess
 import requests
 import telebot
 
-BOT_TOKEN = "8454384380:AAHTm8LaUK5M8RJYs6JK3CzzWIrNH8XG_5E"
+# Apna asli Bot Token yahan daalein
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # User states store karne ke liye dictionary
@@ -188,5 +189,7 @@ def handle_urls(message):
         os.remove(f)
 
 
-print("Direct Bot is running smoothly...")
+# Clear webhook to ensure polling works smoothly
+print("Clearing webhooks and starting bot...")
+bot.remove_webhook()
 bot.infinity_polling(none_stop=True)

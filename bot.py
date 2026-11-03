@@ -3,7 +3,7 @@ import subprocess
 import requests
 import telebot
 
-BOT_TOKEN ="8454384380:AAHTm8LaUK5M8RJYs6JK3CzzWIrNH8XG_5E"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # Local Telegram Bot API Server routing
 if os.getenv("LOCAL_SERVER") == "True":
@@ -166,3 +166,4 @@ def handle_urls(message):
 
 print("Media Merger Bot is running smoothly...")
 bot.infinity_polling(none_stop=True)
+      

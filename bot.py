@@ -3,7 +3,7 @@ import subprocess
 import requests
 import telebot
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN ="8454384380:AAHTm8LaUK5M8RJYs6JK3CzzWIrNH8XG_5E"
 
 # Local Telegram Bot API Server routing
 if os.getenv("LOCAL_SERVER") == "True":

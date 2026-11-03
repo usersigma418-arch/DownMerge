@@ -3,15 +3,10 @@ import subprocess
 import requests
 import telebot
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-# Local Telegram Bot API Server routing
-if os.getenv("LOCAL_SERVER") == "True":
-  telebot.apihelper.API_URL = "http://telegram-api:8081/bot{0}/{1}"
-
+BOT_TOKEN = "8454384380:AAHTm8LaUK5M8RJYs6JK3CzzWIrNH8XG_5E"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# User states store karne ke liye dictionary (chat_id -> data)
+# User states store karne ke liye dictionary
 user_sessions = {}
 
 
@@ -21,8 +16,7 @@ def send_welcome(message):
   user_sessions[chat_id] = {"step": "waiting_for_video"}
   bot.reply_to(
       message,
-      "👋 **Welcome to Amazon Media Merger Bot!**\n\n🎬 **Step 1:** Pehle mujhe"
-      " **Video URL** bhejo.",
+      "👋 **Welcome!**\n\n🎬 **Step 1:** Pehle mujhe **Video URL** bhejo.",
       parse_mode="Markdown",
   )
 
@@ -35,7 +29,6 @@ def handle_urls(message):
   chat_id = message.chat.id
   text = message.text.strip()
 
-  # Agar user ne bina /start kiye direct link bhej diya
   if chat_id not in user_sessions:
     bot.reply_to(
         message,
@@ -46,7 +39,6 @@ def handle_urls(message):
 
   current_step = user_sessions[chat_id].get("step")
 
-  # Step 1: Video URL lene ka
   if current_step == "waiting_for_video":
     user_sessions[chat_id]["video_url"] = text
     user_sessions[chat_id]["step"] = "waiting_for_audio"
@@ -57,17 +49,14 @@ def handle_urls(message):
         parse_mode="Markdown",
     )
 
-  # Step 2: Audio URL lene ka aur final process shuru karne ka
   elif current_step == "waiting_for_audio":
     video_url = user_sessions[chat_id]["video_url"]
     audio_url = text
-
-    # Session clear kar do
     user_sessions[chat_id] = {}
 
     msg = bot.reply_to(
         message,
-        "📥 **Downloading Video and Audio streams...** Please wait ⏳",
+        "📥 **Downloading Video & Audio streams...** Please wait ⏳",
         parse_mode="Markdown",
     )
 
@@ -108,10 +97,9 @@ def handle_urls(message):
           "⚙️ **Merging Video & Audio together...** (FFmpeg muxing)",
           chat_id=chat_id,
           message_id=msg.message_id,
-          parse_Mode="Markdown",
+          parse_mode="Markdown",
       )
 
-      # FFmpeg command to combine video and audio without re-encoding (Super Fast!)
       command = [
           "ffmpeg",
           "-i",
@@ -125,30 +113,66 @@ def handle_urls(message):
       ]
       subprocess.run(command, check=True)
 
-      bot.edit_message_text(
-          "📤 **Uploading final merged video to Telegram...** 🚀",
-          chat_id=chat_id,
-          message_id=msg.message_id,
-          parse_mode="Markdown",
-      )
+      # Check file size for 413 limit protection (>45MB split check)
+      file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
 
-      # 4. Send final video (Local Bot API server allows large files)
-      with open(out_file, "video_file") as vf:
-        # Note: file handler open mode should be "rb"
-        pass
-
-      with open(out_file, "rb") as video_to_send:
-        bot.send_video(
-            chat_id,
-            video_to_send,
-            caption=(
-                "✅ **Merged Successfully!** 🎬\nYour complete video with"
-                " audio is ready."
-            ),
+      if file_size_mb > 45:
+        bot.edit_message_text(
+            f"📦 Merged file size is `{round(file_size_mb, 2)} MB`. Splitting"
+            " into safe parts for Telegram...",
+            chat_id=chat_id,
+            message_id=msg.message_id,
             parse_mode="Markdown",
         )
 
-      bot.delete_message(chat_id, msg.message_id)
+        output_pattern = f"part_{chat_id}_%03d.mp4"
+        subprocess.run([
+            "ffmpeg",
+            "-i",
+            out_file,
+            "-c",
+            "copy",
+            "-f",
+            "segment",
+            "-segment_time",
+            "300",
+            "-reset_timestamps",
+            "1",
+            output_pattern,
+        ])
+
+        parts = sorted(
+            [p for p in os.listdir(".") if p.startswith(f"part_{chat_id}_")]
+        )
+        bot.delete_message(chat_id, msg.message_id)
+
+        for i, part in enumerate(parts):
+          bot.send_message(
+              chat_id,
+              f"📤 Sending Part **{i+1}** of **{len(parts)}** 🚀",
+              parse_mode="Markdown",
+          )
+          with open(part, "rb") as pf:
+            bot.send_video(
+                chat_id, pf, caption=f"Part {i+1}/{len(parts)} 🎬"
+            )
+          os.remove(part)
+
+      else:
+        bot.edit_message_text(
+            "📤 **Uploading merged video to Telegram...** 🚀",
+            chat_id=chat_id,
+            message_id=msg.message_id,
+            parse_mode="Markdown",
+        )
+        with open(out_file, "rb") as video_to_send:
+          bot.send_video(
+              chat_id,
+              video_to_send,
+              caption="✅ **Merged & Sent Successfully!** 🎬",
+              parse_mode="Markdown",
+          )
+        bot.delete_message(chat_id, msg.message_id)
 
     except Exception as e:
       bot.edit_message_text(
@@ -164,6 +188,5 @@ def handle_urls(message):
         os.remove(f)
 
 
-print("Media Merger Bot is running smoothly...")
+print("Direct Bot is running smoothly...")
 bot.infinity_polling(none_stop=True)
-      

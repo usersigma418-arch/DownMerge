@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  telegram-api:
+    image: telegrammessenger/telegram-bot-api:latest
+    container_name: telegram-bot-api
+    restart: always
+    environment:
+      - TELEGRAM_API_ID=YOUR_API_ID
+      - TELEGRAM_API_HASH=YOUR_API_HASH
+    ports:
+      - "8081:8081"
+      - "8082:8082"
+
+  bot:
+    build: .
+    container_name: amazon_bot
+    restart: always
+    depends_on:
+      - telegram-api
+    environment:
+      - BOT_TOKEN=YOUR_BOT_TOKEN
+      - LOCAL_SERVER=True

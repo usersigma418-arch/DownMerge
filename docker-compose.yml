@@ -6,7 +6,7 @@ services:
     container_name: telegram-bot-api
     restart: always
     environment:
-      - TELEGRAM_API_ID=8091813423:AAHCl-VJHR_4inmc5agEuELhtCDv3RuFwec
+      - TELEGRAM_API_ID=38456866
       - TELEGRAM_API_HASH=30a8f347f538733a1d57dae8cc458ddc
     ports:
       - "8081:8081"

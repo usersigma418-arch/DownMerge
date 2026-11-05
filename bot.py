@@ -1,13 +1,13 @@
+import json
 import os
 import subprocess
 import requests
 import telebot
 
 # Apna asli Bot Token yahan daalein
-BOT_TOKEN = "8454384380:AAGeE4SAl_jMWbObLKHaU4YBx3QeSQoapGo"
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# User states store karne ke liye dictionary
 user_sessions = {}
 
 
@@ -114,17 +114,36 @@ def handle_urls(message):
       ]
       subprocess.run(command, check=True)
 
-      # Check file size for 413 limit protection (>45MB split check)
       file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
 
+      # Smart Size-Based Splitting (>45MB) - Minimum parts closest to 44MB limit
       if file_size_mb > 45:
         bot.edit_message_text(
-            f"📦 Merged file size is `{round(file_size_mb, 2)} MB`. Splitting"
-            " into safe parts for Telegram...",
+            f"📦 File size is `{round(file_size_mb, 2)} MB`. Optimizing and"
+            " splitting into max-size parts (~44MB each)...",
             chat_id=chat_id,
             message_id=msg.message_id,
             parse_mode="Markdown",
         )
+
+        probe_cmd = [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            out_file,
+        ]
+        probe_res = subprocess.run(
+            probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        probe_data = json.loads(probe_res.stdout)
+        total_duration = float(probe_data["format"]["duration"])
+
+        target_part_size_mb = 44.0
+        num_parts = int(file_size_mb // target_part_size_mb) + 1
+        segment_duration = total_duration / num_parts
 
         output_pattern = f"part_{chat_id}_%03d.mp4"
         subprocess.run([
@@ -136,7 +155,7 @@ def handle_urls(message):
             "-f",
             "segment",
             "-segment_time",
-            "300",
+            str(segment_duration),
             "-reset_timestamps",
             "1",
             output_pattern,
@@ -150,12 +169,17 @@ def handle_urls(message):
         for i, part in enumerate(parts):
           bot.send_message(
               chat_id,
-              f"📤 Sending Part **{i+1}** of **{len(parts)}** 🚀",
+              f"📤 Sending Optimized Part **{i+1}** of **{len(parts)}** 🚀",
               parse_mode="Markdown",
           )
           with open(part, "rb") as pf:
             bot.send_video(
-                chat_id, pf, caption=f"Part {i+1}/{len(parts)} 🎬"
+                chat_id,
+                pf,
+                caption=(
+                    f"Part {i+1}/{len(parts)} (~{round(os.path.getsize(part)/(1024*1024), 1)}MB)"
+                    " 🎬"
+                ),
             )
           os.remove(part)
 
@@ -183,13 +207,11 @@ def handle_urls(message):
           parse_mode="Markdown",
       )
 
-    # Cleanup temp files
     for f in [vid_file, aud_file, out_file]:
       if os.path.exists(f):
         os.remove(f)
 
 
-# Clear webhook to ensure polling works smoothly
 print("Clearing webhooks and starting bot...")
 bot.remove_webhook()
 bot.infinity_polling(none_stop=True)

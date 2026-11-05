@@ -5,7 +5,7 @@ import requests
 import telebot
 
 # Apna asli Bot Token yahan daalein
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = "8454384380:AAGeE4SAl_jMWbObLKHaU4YBx3QeSQoapGo"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 user_sessions = {}

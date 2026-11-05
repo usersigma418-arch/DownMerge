@@ -1,11 +1,10 @@
+import json
 import os
 import subprocess
 import requests
 import telebot
 
-# Telegram Local API URL point karne ke liye (Port 8081)
-telebot.apihelper.API_URL = "http://localhost:8081/bot{0}/{1}"
-
+# Apna asli Bot Token yahan daalein
 BOT_TOKEN = "8454384380:AAGeE4SAl_jMWbObLKHaU4YBx3QeSQoapGo"
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -96,7 +95,7 @@ def handle_urls(message):
 
       # 3. Merge using FFmpeg
       bot.edit_message_text(
-          "⚙️ **Merging Video & Audio together...**",
+          "⚙️ **Merging Video & Audio together...** (FFmpeg muxing)",
           chat_id=chat_id,
           message_id=msg.message_id,
           parse_mode="Markdown",
@@ -117,41 +116,103 @@ def handle_urls(message):
 
       file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
 
-      # Cleanup raw files
-      for f in [vid_file, aud_file]:
-        if os.path.exists(f):
-          os.remove(f)
-
-      bot.edit_message_text(
-          f"📤 **Uploading Full Video ({round(file_size_mb, 2)} MB) via Local"
-          " API...** 🚀",
-          chat_id=chat_id,
-          message_id=msg.message_id,
-          parse_mode="Markdown",
-      )
-
-      # Direct Single File Upload (Local API handles up to 2GB)
-      with open(out_file, "rb") as video_to_send:
-        bot.send_video(
-            chat_id,
-            video_to_send,
-            caption="✅ **Merged & Sent as Full Single File!** 🎬",
+      # 4. Strict 48MB Based Splitting Check
+      if file_size_mb > 48:
+        bot.edit_message_text(
+            f"📦 File size is `{round(file_size_mb, 2)} MB`. Splitting strictly"
+            " into ~48MB safe parts...",
+            chat_id=chat_id,
+            message_id=msg.message_id,
             parse_mode="Markdown",
         )
-      bot.delete_message(chat_id, msg.message_id)
+
+        probe_cmd = [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            out_file,
+        ]
+        probe_res = subprocess.run(
+            probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        probe_data = json.loads(probe_res.stdout)
+        total_duration = float(probe_data["format"]["duration"])
+
+        # Target part size set to strictly ~48MB chunks
+        target_part_size_mb = 48.0
+        num_parts = int(file_size_mb // target_part_size_mb) + 1
+        segment_duration = total_duration / num_parts
+
+        output_pattern = f"part_{chat_id}_%03d.mp4"
+        subprocess.run([
+            "ffmpeg",
+            "-i",
+            out_file,
+            "-c",
+            "copy",
+            "-f",
+            "segment",
+            "-segment_time",
+            str(segment_duration),
+            "-reset_timestamps",
+            "1",
+            output_pattern,
+        ])
+
+        parts = sorted(
+            [p for p in os.listdir(".") if p.startswith(f"part_{chat_id}_")]
+        )
+        bot.delete_message(chat_id, msg.message_id)
+
+        for i, part in enumerate(parts):
+          part_size = round(os.path.getsize(part) / (1024 * 1024), 1)
+          bot.send_message(
+              chat_id,
+              f"📤 Sending Part **{i+1}** of **{len(parts)}** (~{part_size}MB)"
+              " 🚀",
+              parse_mode="Markdown",
+          )
+          with open(part, "rb") as pf:
+            bot.send_video(
+                chat_id,
+                pf,
+                caption=f"Part {i+1}/{len(parts)} (~{part_size}MB) 🎬",
+            )
+          os.remove(part)
+
+      else:
+        bot.edit_message_text(
+            "📤 **Uploading merged video to Telegram...** 🚀",
+            chat_id=chat_id,
+            message_id=msg.message_id,
+            parse_mode="Markdown",
+        )
+        with open(out_file, "rb") as video_to_send:
+          bot.send_video(
+              chat_id,
+              video_to_send,
+              caption="✅ **Merged & Sent Successfully!** 🎬",
+              parse_mode="Markdown",
+          )
+        bot.delete_message(chat_id, msg.message_id)
 
     except Exception as e:
       bot.edit_message_text(
-          f"⚠️ **Error:** `{str(e)}`",
+          f"⚠️ **Error during processing:** `{str(e)}`",
           chat_id=chat_id,
           message_id=msg.message_id,
           parse_mode="Markdown",
       )
 
-    if os.path.exists(out_file):
-      os.remove(out_file)
+    for f in [vid_file, aud_file, out_file]:
+      if os.path.exists(f):
+        os.remove(f)
 
 
-print("Clearing webhooks and starting bot with Local API...")
+print("Clearing webhooks and starting bot...")
 bot.remove_webhook()
 bot.infinity_polling(none_stop=True)
+      

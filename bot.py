@@ -117,7 +117,7 @@ def handle_urls(message):
       file_size_mb = os.path.getsize(out_file) / (1024 * 1024)
 
       # 4. Strict 48MB Based Splitting Check
-      if file_size_mb > 46:
+      if file_size_mb > 42:
         bot.edit_message_text(
             f"📦 File size is `{round(file_size_mb, 2)} MB`. Splitting strictly"
             " into ~48MB safe parts...",
